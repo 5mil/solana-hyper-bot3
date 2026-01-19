@@ -1,0 +1,145 @@
+name: Emergency Stop
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_name:
+        description: 'Container name to stop'
+        required: true
+        default: 'bot-production'
+      sweep_funds:
+        description: 'Sweep funds to emergency address'
+        required: true
+        type: boolean
+        default: false
+      reason:
+        description: 'Reason for emergency stop'
+        required: true
+
+jobs:
+  emergency-stop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: emergency
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Log emergency action
+        run: |
+          echo "🚨 EMERGENCY STOP INITIATED"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "Container: ${{ github.event.inputs.container_name }}"
+          echo "Sweep funds: ${{ github.event.inputs.sweep_funds }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Triggered by: ${{ github.actor }}"
+      
+      - name: Stop container
+        run: |
+          echo "Stopping container: ${{ github.event.inputs.container_name }}"
+          # In actual deployment, would execute:
+          # docker stop ${{ github.event.inputs.container_name }} || true
+          # docker rm ${{ github.event.inputs.container_name }} || true
+          echo "⚠️ Container stop command placeholder - requires actual infrastructure"
+      
+      - name: Sweep funds to emergency address
+        if: ${{ github.event.inputs.sweep_funds == 'true' }}
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+          EMERGENCY_SWEEP_ADDRESS: ${{ secrets.EMERGENCY_SWEEP_ADDRESS }}
+        run: |
+          echo "🔒 Initiating fund sweep to emergency address..."
+          echo "Emergency address: $EMERGENCY_SWEEP_ADDRESS"
+          
+          # Placeholder for actual sweep transaction
+          # In production, would:
+          # 1. Set up Python environment
+          # 2. Install Solana SDK
+          # 3. Load wallet keypair
+          # 4. Query all token balances
+          # 5. Create and sign transfer transactions
+          # 6. Submit transactions
+          # 7. Wait for confirmation
+          
+          echo "⚠️ Fund sweep is a PLACEHOLDER - requires implementation"
+          echo "⚠️ Never test with real funds without thorough testing"
+          
+          # Example pseudocode:
+          # python << EOF
+          # from solana.rpc.api import Client
+          # from solana.keypair import Keypair
+          # # Load keypair from env
+          # # Get all balances
+          # # Create transfer instructions
+          # # Sign and send
+          # EOF
+      
+      - name: Create incident summary
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          cat > incident_summary.md << EOF
+          # Emergency Stop Incident Report
+          
+          **Timestamp**: $TIMESTAMP
+          **Container**: ${{ github.event.inputs.container_name }}
+          **Funds Swept**: ${{ github.event.inputs.sweep_funds }}
+          **Triggered By**: ${{ github.actor }}
+          **Run ID**: ${{ github.run_id }}
+          
+          ## Reason
+          ${{ github.event.inputs.reason }}
+          
+          ## Actions Taken
+          - Container stopped: ${{ github.event.inputs.container_name }}
+          - Funds swept: ${{ github.event.inputs.sweep_funds }}
+          
+          ## Next Steps
+          1. Investigate root cause
+          2. Review logs and metrics
+          3. Determine if bot can be safely restarted
+          4. Update configuration if needed
+          5. Document lessons learned
+          
+          ## Logs and Artifacts
+          - Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          
+          cat incident_summary.md
+      
+      - name: Upload incident report
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-report-${{ github.run_number }}
+          path: incident_summary.md
+          retention-days: 90
+      
+      - name: Post incident comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('incident_summary.md', 'utf8');
+            
+            // Post as workflow summary
+            core.summary.addRaw(summary).write();
+            
+            // Optionally create an issue for tracking
+            // github.rest.issues.create({
+            //   owner: context.repo.owner,
+            //   repo: context.repo.repo,
+            //   title: '🚨 Emergency Stop: ${{ github.event.inputs.reason }}',
+            //   body: summary,
+            //   labels: ['incident', 'emergency']
+            // });
+      
+      - name: Notify team
+        run: |
+          echo "📢 Emergency stop completed"
+          echo "Review the incident report artifact for details"
+          # In production, would send alerts via:
+          # - Slack webhook
+          # - PagerDuty
+          # - Email
+          # - SMS

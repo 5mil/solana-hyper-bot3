@@ -1,0 +1,162 @@
+name: Test Simulation
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of iterations'
+        required: true
+        default: '1000'
+      delay_sec:
+        description: 'Delay between iterations (seconds)'
+        required: true
+        default: '0.5'
+
+jobs:
+  high-fidelity-simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run high-fidelity simulation
+        run: |
+          ITERATIONS=${{ github.event.inputs.iterations || '1000' }}
+          DELAY=${{ github.event.inputs.delay_sec || '0.5' }}
+          echo "Running simulation with $ITERATIONS iterations..."
+          python src/live_bot.py --mode simulation --cycles $ITERATIONS --delay $DELAY
+      
+      - name: Analyze results
+        id: analyze
+        run: |
+          if [ ! -f data/performance_stats.json ]; then
+            echo "❌ Simulation failed - no results generated"
+            exit 1
+          fi
+          
+          # Extract metrics
+          WIN_RATE=$(jq -r '.trading_summary.win_rate // 0' data/performance_stats.json)
+          RETURN_PCT=$(jq -r '.trading_summary.return_pct // 0' data/performance_stats.json)
+          TOTAL_TRADES=$(jq -r '.trading_summary.total_trades // 0' data/performance_stats.json)
+          BALANCE=$(jq -r '.trading_summary.current_balance // 0' data/performance_stats.json)
+          INITIAL_BALANCE=$(jq -r '.trading_summary.initial_balance // 100' data/performance_stats.json || echo "100")
+          
+          # Calculate max drawdown (simplified)
+          MAX_DRAWDOWN=$(echo "scale=2; (($INITIAL_BALANCE - $BALANCE) / $INITIAL_BALANCE) * 100" | bc)
+          if (( $(echo "$MAX_DRAWDOWN < 0" | bc -l) )); then
+            MAX_DRAWDOWN=0
+          fi
+          
+          # Calculate monthly return (annualized)
+          AVG_MONTHLY_RETURN=$(echo "scale=2; $RETURN_PCT / 12" | bc)
+          
+          echo "win_rate=$WIN_RATE" >> $GITHUB_OUTPUT
+          echo "return_pct=$RETURN_PCT" >> $GITHUB_OUTPUT
+          echo "max_drawdown=$MAX_DRAWDOWN" >> $GITHUB_OUTPUT
+          echo "avg_monthly_return=$AVG_MONTHLY_RETURN" >> $GITHUB_OUTPUT
+          echo "total_trades=$TOTAL_TRADES" >> $GITHUB_OUTPUT
+          
+          # Display results
+          echo "## Simulation Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Trades**: $TOTAL_TRADES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Win Rate**: $WIN_RATE%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Return**: $RETURN_PCT%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Avg Monthly Return**: $AVG_MONTHLY_RETURN%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Max Drawdown**: $MAX_DRAWDOWN%" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Enforce thresholds
+        run: |
+          WIN_RATE=${{ steps.analyze.outputs.win_rate }}
+          AVG_MONTHLY=${{ steps.analyze.outputs.avg_monthly_return }}
+          MAX_DRAWDOWN=${{ steps.analyze.outputs.max_drawdown }}
+          
+          PASS=true
+          
+          echo "## Threshold Checks" >> $GITHUB_STEP_SUMMARY
+          
+          # Win rate >= 90%
+          if (( $(echo "$WIN_RATE >= 90" | bc -l) )); then
+            echo "✅ Win Rate: $WIN_RATE% >= 90%" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Win Rate: $WIN_RATE% < 90%" >> $GITHUB_STEP_SUMMARY
+            PASS=false
+          fi
+          
+          # Avg monthly return >= 45%
+          if (( $(echo "$AVG_MONTHLY >= 45" | bc -l) )); then
+            echo "✅ Avg Monthly Return: $AVG_MONTHLY% >= 45%" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Avg Monthly Return: $AVG_MONTHLY% < 45%" >> $GITHUB_STEP_SUMMARY
+            PASS=false
+          fi
+          
+          # Max drawdown <= 10%
+          if (( $(echo "$MAX_DRAWDOWN <= 10" | bc -l) )); then
+            echo "✅ Max Drawdown: $MAX_DRAWDOWN% <= 10%" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Max Drawdown: $MAX_DRAWDOWN% > 10%" >> $GITHUB_STEP_SUMMARY
+            PASS=false
+          fi
+          
+          if [ "$PASS" = false ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Simulation failed to meet production thresholds**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All thresholds met - ready for production promotion**" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload simulation artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulation-report-${{ github.run_number }}
+          path: |
+            data/performance_stats.json
+            data/simulation_output/**
+          retention-days: 30
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('data/performance_stats.json', 'utf8'));
+            const summary = data.trading_summary;
+            
+            const comment = `## 📊 High-Fidelity Simulation Results
+            
+            **Performance Metrics:**
+            - Total Trades: ${summary.total_trades}
+            - Win Rate: ${summary.win_rate.toFixed(2)}%
+            - Total Return: ${summary.return_pct.toFixed(2)}%
+            - Current Balance: ${summary.current_balance.toFixed(2)}
+            
+            **Thresholds:**
+            - ✅ Win Rate >= 90%: ${summary.win_rate >= 90 ? 'PASS' : 'FAIL'}
+            - Monthly Return >= 45%: Check workflow logs
+            - Max Drawdown <= 10%: Check workflow logs
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

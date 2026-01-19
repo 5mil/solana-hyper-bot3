@@ -1,0 +1,24 @@
+{
+  "min_confidence": 0.75,
+  "max_position_pct": 0.35,
+  "max_daily_loss_pct": 5.0,
+  "consecutive_losses_limit": 5,
+  "slippage_cap_pct": 1.0,
+  "circuit_breaker_drawdown": 0.25,
+  "initial_balance": 100,
+  "account_balance": 100,
+  "metrics_path": "data/performance_stats.json",
+  "logic_gate": {
+    "max_mev_risk": 0.7,
+    "max_latency_ms": 500.0,
+    "max_price_jump_pct": 5.0,
+    "max_ema_deviation_pct": 10.0,
+    "min_volume_24h": 1000.0
+  },
+  "leverage": {
+    "max_leverage": 5.0,
+    "max_position_pct": 0.35,
+    "min_position_pct": 0.01,
+    "risk_per_trade_pct": 0.02
+  }
+}

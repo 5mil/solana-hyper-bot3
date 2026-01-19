@@ -1,0 +1,178 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Deployment mode'
+        required: true
+        type: choice
+        options:
+          - simulation
+          - live-test
+          - production
+        default: 'simulation'
+      iterations:
+        description: 'Number of iterations (simulation mode)'
+        required: false
+        default: '100'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/test_logic_gate.py -v
+          pytest tests/test_onflow_engine.py -v
+          pytest tests/test_mdp_decision.py -v
+      
+      - name: Run integration tests
+        run: |
+          pytest tests/test_integration_end_to_end.py -v
+  
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        run: |
+          docker build -t solana-hyper-bot3:latest .
+      
+      - name: Login to GitHub Container Registry
+        if: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT != '' }}
+        run: |
+          echo "${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      
+      - name: Tag and push image
+        if: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT != '' }}
+        run: |
+          docker tag solana-hyper-bot3:latest ghcr.io/${{ github.repository }}:latest
+          docker tag solana-hyper-bot3:latest ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+  
+  run-simulation:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ github.event.inputs.mode == 'simulation' || github.event.inputs.mode == '' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run simulation
+        run: |
+          ITERATIONS=${{ github.event.inputs.iterations || '100' }}
+          python src/live_bot.py --mode simulation --cycles $ITERATIONS --delay 0.5
+      
+      - name: Upload simulation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-results
+          path: data/performance_stats.json
+      
+      - name: Parse and comment results
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f data/performance_stats.json ]; then
+            WIN_RATE=$(jq -r '.trading_summary.win_rate // 0' data/performance_stats.json)
+            RETURN_PCT=$(jq -r '.trading_summary.return_pct // 0' data/performance_stats.json)
+            TOTAL_TRADES=$(jq -r '.trading_summary.total_trades // 0' data/performance_stats.json)
+            
+            echo "## Simulation Results" >> $GITHUB_STEP_SUMMARY
+            echo "- **Win Rate**: ${WIN_RATE}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Return**: ${RETURN_PCT}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Total Trades**: ${TOTAL_TRADES}" >> $GITHUB_STEP_SUMMARY
+          fi
+  
+  run-live-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.inputs.mode == 'live-test' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run live test
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+        run: |
+          echo "Running live test with limited cycles..."
+          python src/live_bot.py --mode live --cycles 5 --delay 10
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-test-results
+          path: data/performance_stats.json
+  
+  deploy-production:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event.inputs.mode == 'production' }}
+    environment: production
+    
+    steps:
+      - name: Pull and run production container
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+          GITHUB_CONTAINER_REGISTRY_PAT: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT }}
+        run: |
+          echo "Deploying to production..."
+          echo "⚠️ Production deployment requires infrastructure setup"
+          echo "This is a placeholder for actual deployment commands"
+          # In real deployment, would:
+          # 1. Pull image from GHCR
+          # 2. Stop old container
+          # 3. Start new container with secrets
+          # 4. Health check
