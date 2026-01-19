@@ -55,9 +55,11 @@ async def main():
     onflow_engine = OnflowEngine()
     mdp_engine = MDPDecision()
     
+    from src.core.types import ActionType
+    
     ensemble.add_engine(
         "onflow",
-        lambda ms: (ms.regime.value, onflow_engine.suggest_allocation(ms))
+        lambda ms: (ActionType.BUY, onflow_engine.suggest_allocation(ms))
     )
     ensemble.add_engine(
         "mdp",

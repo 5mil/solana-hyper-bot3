@@ -115,7 +115,8 @@ class MDPDecision:
         # Epsilon-greedy exploration
         if explore and np.random.random() < self.epsilon:
             # Random action
-            action_type = np.random.choice(list(ActionType))
+            import random
+            action_type = random.choice(list(ActionType))
             confidence = 0.3  # Low confidence for random actions
         else:
             # Greedy action (highest Q-value)
