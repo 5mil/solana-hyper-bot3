@@ -1,0 +1,35 @@
+{
+  "min_confidence": 0.75,
+  "max_position_pct": 0.35,
+  "max_daily_loss_pct": 0.15,
+  "consecutive_losses_limit": 5,
+  "slippage_cap_pct": 0.5,
+  "circuit_breaker_drawdown": 0.25,
+  "initial_balance": 100.0,
+  "account_balance": 100.0,
+  "metrics_path": "data/performance_stats.json",
+  "logic_gate": {
+    "mev_risk_threshold": 0.7,
+    "max_latency_ms": 500.0,
+    "max_price_jump_pct": 5.0,
+    "max_ema_deviation_pct": 10.0,
+    "min_volume_24h": 100000.0
+  },
+  "leverage": {
+    "max_leverage": 5.0,
+    "max_position_pct": 0.35,
+    "min_position_pct": 0.01,
+    "use_kelly": true
+  },
+  "onflow": {
+    "alpha": 0.3,
+    "min_allocation": 0.05,
+    "max_allocation": 0.35
+  },
+  "mdp": {
+    "learning_rate": 0.1,
+    "discount_factor": 0.95,
+    "epsilon": 0.1,
+    "state_bins": 10
+  }
+}

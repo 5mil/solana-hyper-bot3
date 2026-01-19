@@ -1,0 +1,230 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches:
+      - main
+      - feat/**
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Deployment mode'
+        required: true
+        type: choice
+        options:
+          - simulation
+          - live-test
+          - production
+        default: 'simulation'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --tb=short
+      
+      - name: Run simulation test
+        run: |
+          python tools/run_simulation.py --iterations 10 --output data/quick_sim.json
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            data/quick_sim.json
+            data/performance_stats.json
+
+  build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        if: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ secrets.GITHUB_CONTAINER_REGISTRY_PAT != '' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run Simulation Mode
+        if: inputs.mode == 'simulation'
+        run: |
+          echo "Running extended simulation..."
+          python tools/run_simulation.py \
+            --iterations 200 \
+            --execute-trades \
+            --output data/deploy_simulation_report.json
+      
+      - name: Analyze Simulation Results
+        if: inputs.mode == 'simulation'
+        id: analyze
+        run: |
+          python -c "
+          import json
+          import sys
+          
+          with open('data/deploy_simulation_report.json') as f:
+              data = json.load(f)
+          
+          perf = data['summary']['trading_performance']
+          
+          print(f\"Win Rate: {perf['win_rate']:.1%}\")
+          print(f\"Return: {perf['return_pct']:.1f}%\")
+          print(f\"Total Trades: {perf['total_trades']}\")
+          
+          # Set outputs
+          with open('$GITHUB_OUTPUT', 'a') as out:
+              out.write(f\"win_rate={perf['win_rate']:.3f}\n\")
+              out.write(f\"return_pct={perf['return_pct']:.2f}\n\")
+              out.write(f\"total_trades={perf['total_trades']}\n\")
+          
+          # Check thresholds
+          if perf['win_rate'] < 0.90:
+              print('ERROR: Win rate below 90% threshold')
+              sys.exit(1)
+          
+          print('Simulation passed thresholds')
+          "
+      
+      - name: Run Live Test Mode
+        if: inputs.mode == 'live-test'
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+        run: |
+          echo "Live test mode requires production adapters"
+          echo "This scaffold uses mock adapters only"
+          echo "Production deployment would run: python src/live_bot.py"
+      
+      - name: Run Production Mode
+        if: inputs.mode == 'production'
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+        run: |
+          echo "Production mode requires production adapters and secrets"
+          echo "This scaffold uses mock adapters only"
+          echo "Production deployment would start live bot container"
+      
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-report
+          path: |
+            data/*.json
+            logs/*.log
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && inputs.mode == 'simulation'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('data/deploy_simulation_report.json', 'utf8'));
+            const perf = report.summary.trading_performance;
+            
+            const comment = `## 🤖 Simulation Results
+            
+            **Mode**: ${context.payload.inputs.mode}
+            **Iterations**: ${report.summary.total_iterations}
+            **Trades**: ${perf.total_trades}
+            
+            ### Performance
+            - ✅ Win Rate: ${(perf.win_rate * 100).toFixed(1)}%
+            - 💰 Total Return: ${perf.return_pct.toFixed(1)}%
+            - 📊 Winning Trades: ${perf.winning_trades}
+            - 📉 Losing Trades: ${perf.losing_trades}
+            - 💵 Final Capital: $${perf.current_capital.toFixed(2)}
+            
+            ### Thresholds
+            - Win Rate: ${perf.win_rate >= 0.90 ? '✅' : '❌'} (>= 90%)
+            - Avg Monthly Return: ${perf.return_pct >= 45 ? '✅' : '⚠️'} (>= 45%)
+            
+            <details>
+            <summary>View Full Report</summary>
+            
+            \`\`\`json
+            ${JSON.stringify(report.summary, null, 2)}
+            \`\`\`
+            </details>
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

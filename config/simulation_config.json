@@ -1,0 +1,13 @@
+{
+  "execute_trades": false,
+  "iterations": 100,
+  "delay_sec": 0.1,
+  "metrics_path": "data/simulation_stats.json",
+  "mock_market_data": {
+    "base_price": 100.0,
+    "volatility": 0.02,
+    "trend": 0.001,
+    "random_walk": true
+  },
+  "output_report": "data/simulation_report.json"
+}

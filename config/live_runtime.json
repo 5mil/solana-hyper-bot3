@@ -1,0 +1,21 @@
+{
+  "rpc_url": "https://api.mainnet-beta.solana.com",
+  "jupiter_endpoint": "https://quote-api.jup.ag/v6",
+  "wallet_secret_env": "WALLET_KEYPAIR",
+  "health_check_port": 8080,
+  "drift_program_id": "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",
+  "marginfi_program_id": "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA",
+  "jito_block_engine": "mainnet.block-engine.jito.wtf",
+  "jito_tip_accounts": [
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY"
+  ],
+  "execution": {
+    "use_jito": true,
+    "use_twap": false,
+    "twap_slices": 5,
+    "twap_delay_sec": 2.0,
+    "max_slippage_bps": 50.0
+  }
+}

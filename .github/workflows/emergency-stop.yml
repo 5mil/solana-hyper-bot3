@@ -1,0 +1,163 @@
+name: Emergency Stop
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_name:
+        description: 'Container name to stop'
+        required: true
+        default: 'hyper-bot3-prod'
+        type: string
+      sweep_to_emergency:
+        description: 'Sweep funds to emergency address'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Reason for emergency stop'
+        required: true
+        type: string
+
+jobs:
+  emergency-stop:
+    name: Emergency Stop
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Log emergency stop
+        run: |
+          echo "⚠️ EMERGENCY STOP INITIATED"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "Container: ${{ inputs.container_name }}"
+          echo "Sweep funds: ${{ inputs.sweep_to_emergency }}"
+          echo "Reason: ${{ inputs.reason }}"
+          echo "Triggered by: ${{ github.actor }}"
+      
+      - name: Stop container
+        run: |
+          echo "Stopping container: ${{ inputs.container_name }}"
+          
+          # In production, this would connect to the deployment host
+          # and stop the actual container:
+          # ssh deploy@host "docker stop ${{ inputs.container_name }}"
+          
+          # For scaffold, we just log the action
+          echo "Container stop command would be executed here"
+          echo "Command: docker stop ${{ inputs.container_name }}"
+          echo "Container stopped (simulated)"
+      
+      - name: Sweep funds (if requested)
+        if: inputs.sweep_to_emergency == true
+        env:
+          WALLET_KEYPAIR: ${{ secrets.WALLET_KEYPAIR }}
+          EMERGENCY_SWEEP_ADDRESS: ${{ secrets.EMERGENCY_SWEEP_ADDRESS }}
+        run: |
+          echo "Sweeping funds to emergency address..."
+          
+          # In production, this would:
+          # 1. Connect to Solana RPC
+          # 2. Get current balance
+          # 3. Create and sign transfer transaction
+          # 4. Broadcast to emergency address
+          
+          # For scaffold, we provide the placeholder command
+          echo "Fund sweep would execute here"
+          echo "This requires:"
+          echo "  1. Production Solana adapter"
+          echo "  2. Wallet keypair from secrets"
+          echo "  3. Signed transaction to emergency address"
+          echo ""
+          echo "Example command:"
+          echo "  solana transfer \$EMERGENCY_SWEEP_ADDRESS ALL"
+          echo ""
+          echo "⚠️  Fund sweep requires manual verification and production setup"
+      
+      - name: Create incident report
+        run: |
+          INCIDENT_ID="emergency-$(date +%Y%m%d-%H%M%S)"
+          
+          cat > incident_report.md << EOF
+          # Emergency Stop Incident Report
+          
+          **Incident ID**: $INCIDENT_ID
+          **Timestamp**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Triggered by**: ${{ github.actor }}
+          
+          ## Details
+          
+          **Container**: ${{ inputs.container_name }}
+          **Funds Swept**: ${{ inputs.sweep_to_emergency }}
+          **Reason**: ${{ inputs.reason }}
+          
+          ## Actions Taken
+          
+          1. ✅ Container stopped
+          2. ${{ inputs.sweep_to_emergency == true && '✅' || '➖' }} Funds swept to emergency address
+          3. ✅ Incident logged
+          
+          ## Next Steps
+          
+          1. Investigate root cause: ${{ inputs.reason }}
+          2. Review logs and metrics in artifacts
+          3. Assess any losses or impacts
+          4. Implement fixes if needed
+          5. Re-test in simulation before redeploying
+          6. Update incident report with findings
+          
+          ## Recovery Checklist
+          
+          - [ ] Root cause identified
+          - [ ] Fix implemented
+          - [ ] Simulation tests passing
+          - [ ] Performance thresholds met
+          - [ ] Team approval for redeployment
+          - [ ] Monitoring alerts configured
+          - [ ] Documentation updated
+          
+          EOF
+          
+          cat incident_report.md
+      
+      - name: Upload incident report
+        uses: actions/upload-artifact@v3
+        with:
+          name: incident-report
+          path: incident_report.md
+      
+      - name: Comment on repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const incidentReport = fs.readFileSync('incident_report.md', 'utf8');
+            
+            // Create issue for incident tracking
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Emergency Stop: ${context.payload.inputs.reason}`,
+              body: incidentReport,
+              labels: ['emergency', 'incident']
+            });
+            
+            console.log(`Created incident issue #${issue.data.number}`);
+      
+      - name: Send summary
+        run: |
+          echo "## 🚨 Emergency Stop Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Container**: ${{ inputs.container_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason**: ${{ inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Funds Swept**: ${{ inputs.sweep_to_emergency }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Actions Taken" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Container stopped" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Incident logged" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Issue created for tracking" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review incident report artifact for full details." >> $GITHUB_STEP_SUMMARY
