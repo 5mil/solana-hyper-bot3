@@ -114,7 +114,8 @@ class MDPDecision:
         # Epsilon-greedy selection
         if np.random.random() < self.epsilon:
             # Explore: random action
-            action_type = np.random.choice(list(ActionType))
+            action_types = list(ActionType)
+            action_type = ActionType(np.random.choice([a.value for a in action_types]))
         else:
             # Exploit: best action
             action_type = max(q_values, key=q_values.get)  # type: ignore
