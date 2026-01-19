@@ -1,0 +1,16 @@
+{
+  "execute_trades": false,
+  "iterations": 100,
+  "delay_sec": 1.0,
+  "metrics_path": "data/simulation_stats.json",
+  "market_simulation": {
+    "base_price": 100.0,
+    "price_volatility": 0.02,
+    "volume_range": [5000, 15000]
+  },
+  "reporting": {
+    "generate_plots": false,
+    "save_iteration_logs": true,
+    "output_dir": "data/simulation_output"
+  }
+}

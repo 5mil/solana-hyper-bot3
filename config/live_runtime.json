@@ -1,0 +1,23 @@
+{
+  "rpc_url": "https://api.mainnet-beta.solana.com",
+  "jupiter_endpoint": "https://quote-api.jup.ag/v6",
+  "wallet_secret_env": "WALLET_KEYPAIR",
+  "health_check_port": 8080,
+  "execution": {
+    "use_jito": true,
+    "jito_tip_lamports": 10000,
+    "use_twap": true,
+    "twap_slices": 5,
+    "twap_interval_sec": 2.0
+  },
+  "margin_providers": {
+    "preferred": "drift",
+    "drift_endpoint": "https://api.drift.trade",
+    "marginfi_endpoint": "https://api.marginfi.com"
+  },
+  "monitoring": {
+    "metrics_interval_sec": 60,
+    "alert_on_loss_pct": 3.0,
+    "alert_on_drawdown_pct": 15.0
+  }
+}
