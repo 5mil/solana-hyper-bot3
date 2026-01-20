@@ -33,7 +33,6 @@ from src.simulation.market_simulator import MarketSimulator
 from src.adapters.mock_quote_client import MockMarketDataFetcher, MockQuoteClient
 from src.adapters.realtime_market_data import RealTimeMarketDataFetcher
 from src.adapters.jupiter_quote_client import JupiterQuoteClient
-from src.gui.bot_dashboard import BotGUI
 from src.core.logic_gate import LogicGate
 from src.core.hyper_ensemble import HyperEnsemble
 from src.core.onflow_engine import OnflowEngine
@@ -41,6 +40,14 @@ from src.core.mdp_decision import MDPDecision
 from src.execution.leverage_engine import LeverageEngine, LeverageConfig
 from src.execution.twap_executor import TWAPExecutor
 from src.simulation.paper_trader import PaperTrader
+
+# Optional GUI import
+try:
+    from src.gui.bot_dashboard import BotGUI
+    GUI_AVAILABLE = True
+except ImportError:
+    GUI_AVAILABLE = False
+    print("Warning: GUI not available (tkinter not installed). Use --gui flag only if tkinter is available.")
 
 
 # ============================================================================
@@ -95,6 +102,11 @@ async def run_simulation(
     # Initialize GUI if requested
     gui = None
     if show_gui:
+        if not GUI_AVAILABLE:
+            logger.error("GUI requested but tkinter is not available. Install tkinter to use --gui flag.")
+            print("ERROR: GUI not available. Run without --gui flag or install tkinter.")
+            return
+        
         logger.info("Initializing GUI dashboard...")
         gui = BotGUI()
         gui.start_in_thread()

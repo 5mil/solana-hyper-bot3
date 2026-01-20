@@ -60,7 +60,30 @@ class MarketSimulator:
         max_position_pct = config.get("max_position_pct", 0.35)
         
         self.logic_gate = logic_gate or LogicGate()
-        self.ensemble = ensemble or HyperEnsemble()
+        
+        # Initialize ensemble with default engines if not provided
+        if ensemble is None:
+            from src.core.onflow_engine import OnflowEngine
+            from src.core.mdp_decision import MDPDecision
+            
+            self.ensemble = HyperEnsemble()
+            self.onflow_engine = OnflowEngine()
+            self.mdp_engine = MDPDecision()
+            
+            # Add engines to ensemble
+            self.ensemble.add_engine(
+                "onflow",
+                lambda ms: (ActionType.BUY, self.onflow_engine.suggest_allocation(ms))
+            )
+            self.ensemble.add_engine(
+                "mdp",
+                lambda ms: self.mdp_engine.select_action(ms, explore=True)
+            )
+        else:
+            self.ensemble = ensemble
+            self.onflow_engine = None
+            self.mdp_engine = None
+        
         self.leverage_engine = leverage_engine or LeverageEngine(
             LeverageConfig(
                 max_position_pct=max_position_pct,
@@ -199,14 +222,20 @@ class MarketSimulator:
         """
         paper_summary = self.paper_trader.get_summary()
         
+        # Normalize keys for consistency
+        final_balance = paper_summary.get("current_balance", paper_summary.get("final_balance", 0))
+        total_pnl = paper_summary.get("total_pnl", 0)
+        total_trades = paper_summary.get("total_trades", 0)
+        winning_trades = paper_summary.get("winning_trades", 0)
+        
         return {
-            "final_balance": paper_summary.get("final_balance", 0),
-            "total_pnl": paper_summary.get("total_pnl", 0),
-            "total_trades": paper_summary.get("total_trades", 0),
-            "winning_trades": paper_summary.get("winning_trades", 0),
-            "win_rate_pct": paper_summary.get("win_rate", 0),
-            "return_pct": paper_summary.get("return_pct", 0),
-            "max_drawdown_pct": paper_summary.get("max_drawdown_pct", 0),
+            "final_balance": final_balance,
+            "total_pnl": total_pnl,
+            "total_trades": total_trades,
+            "winning_trades": winning_trades,
+            "win_rate_pct": paper_summary.get("win_rate", 0.0),
+            "return_pct": paper_summary.get("return_pct", 0.0),
+            "max_drawdown_pct": 0.0,  # Would need historical tracking
             "blocked_count": self.decisions_blocked,
             "approved_count": self.decisions_approved,
             "total_cycles": self.iteration,
