@@ -125,5 +125,6 @@ async def test_integration_iteration_report_structure():
             "blocked_by_logic_gate",
             "blocked_by_low_confidence",
             "executed",
+            "paper_trade",
             "simulated_decision"
         ]

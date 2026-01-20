@@ -180,7 +180,10 @@ class MarketSimulator:
                     "fees_paid": trade.fees_paid,
                     "slippage_pct": trade.slippage_pct
                 },
-                "market_state": market_state
+                "market_state": {
+                    "price": market_state.price,
+                    "regime": market_state.regime.value
+                }
             }
         else:
             return {
@@ -190,7 +193,10 @@ class MarketSimulator:
                 "size": sized_action.size,
                 "confidence": decision.consensus_confidence,
                 "price": market_state.price,
-                "market_state": market_state
+                "market_state": {
+                    "price": market_state.price,
+                    "regime": market_state.regime.value
+                }
             }
     
     async def run_cycle(self, symbol: str = "SOL/USD", execute_trades: bool = None) -> Dict[str, Any]:
