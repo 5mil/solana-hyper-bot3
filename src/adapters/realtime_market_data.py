@@ -242,9 +242,10 @@ class RealTimeMarketDataFetcher:
         liquidity_score = min(1.0, liquidity_raw / 1_000_000_000)  # Normalize to 1B
         
         # Estimate MEV risk and latency
-        # Real MEV detection would require analyzing mempool
-        mev_risk_score = 0.3  # Moderate baseline risk
-        latency_ms = 150.0  # Typical Solana RPC latency
+        # TODO: Real MEV detection would require analyzing mempool and transaction patterns
+        # For now, use conservative baseline estimates
+        mev_risk_score = 0.3  # Moderate baseline risk (30%)
+        latency_ms = 150.0  # Typical Solana RPC latency (150ms)
         
         market_state = MarketState(
             price=price,

@@ -388,7 +388,8 @@ class BotGUI:
         # Limit log size (keep last 1000 lines)
         lines = int(self.log_text.index('end-1c').split('.')[0])
         if lines > 1000:
-            self.log_text.delete('1.0', '100.0')
+            # Delete first 100 lines when limit exceeded
+            self.log_text.delete('1.0', '101.0')
     
     def update(self, update_type: str, data: Dict[str, Any]):
         """

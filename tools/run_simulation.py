@@ -18,6 +18,7 @@ import json
 import logging
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -244,7 +245,6 @@ async def run_simulation(
             gui.update("log", {"message": f"\n[COMPLETE] Results saved to {output_path}\n"})
             logger.info("GUI will remain open. Close window to exit.")
             # Keep GUI running
-            import time
             while True:
                 await asyncio.sleep(1)
         

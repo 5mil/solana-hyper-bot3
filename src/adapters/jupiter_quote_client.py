@@ -71,8 +71,8 @@ class JupiterQuoteClient:
         else:  # sell
             input_mint = self.sol_mint
             output_mint = self.usdc_mint
-            # Estimate SOL amount - would need current price
-            # For now, use a rough estimate
+            # TODO: Fetch current price for more accurate quote amount
+            # For now, use rough estimate of $100/SOL
             amount = int((size_notional / 100) * 10**9)  # Assume ~$100/SOL
         
         url = f"{self.jupiter_endpoint}/quote"
