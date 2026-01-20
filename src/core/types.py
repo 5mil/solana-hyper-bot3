@@ -5,8 +5,8 @@ This module defines all shared types, enums, and data models used throughout the
 """
 from enum import Enum
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
-from datetime import datetime
+from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime, timezone
 
 
 class ActionType(str, Enum):
@@ -39,7 +39,11 @@ class MarketState(BaseModel):
     
     Contains all relevant market data needed for decision making.
     """
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    model_config = ConfigDict(
+        json_encoders={datetime: lambda v: v.isoformat()}
+    )
+    
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     symbol: str = Field(default="SOL/USD")
     price: float = Field(gt=0)
     volume_24h: float = Field(ge=0)
@@ -52,11 +56,6 @@ class MarketState(BaseModel):
     liquidity_score: float = Field(ge=0, le=1, default=1.0)
     mev_risk_score: float = Field(ge=0, le=1, default=0.0)
     latency_ms: float = Field(ge=0, default=0.0)
-    
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
 
 
 class Action(BaseModel):
@@ -82,17 +81,16 @@ class Decision(BaseModel):
     
     Contains the recommended action, consensus confidence, and reasoning.
     """
+    model_config = ConfigDict(
+        json_encoders={datetime: lambda v: v.isoformat()}
+    )
+    
     action: Action
     consensus_confidence: float = Field(ge=0, le=1)
     status: DecisionStatus = DecisionStatus.PENDING
     reasons: List[str] = Field(default_factory=list)
     engine_votes: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     def __str__(self) -> str:
         return f"Decision({self.action.action_type.value}, conf={self.consensus_confidence:.2f}, status={self.status.value})"
