@@ -32,9 +32,10 @@ class MarketSimulator:
         ensemble: Optional[HyperEnsemble] = None,
         leverage_engine: Optional[LeverageEngine] = None,
         paper_trader: Optional[PaperTrader] = None,
-        min_confidence: float = 0.75,
+        min_confidence: Optional[float] = None,
         execute_trades: bool = False,
-        metrics_path: str = "data/performance_stats.json"
+        metrics_path: str = "data/performance_stats.json",
+        config: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize market simulator.
@@ -45,16 +46,51 @@ class MarketSimulator:
             ensemble: Decision ensemble (creates default if None)
             leverage_engine: Position sizing (creates default if None)
             paper_trader: Paper trader (creates default if None)
-            min_confidence: Minimum confidence for execution
+            min_confidence: Minimum confidence for execution (overridden by config if present)
             execute_trades: Whether to execute trades (if False, only simulate decisions)
             metrics_path: Path to write metrics
+            config: Optional configuration dictionary
         """
         self.market_data_fetcher = market_data_fetcher
+        
+        # Handle config
+        config = config or {}
+        self.min_confidence = config.get("min_confidence", min_confidence or 0.75)
+        initial_balance = config.get("initial_balance", 100.0)
+        max_position_pct = config.get("max_position_pct", 0.35)
+        
         self.logic_gate = logic_gate or LogicGate()
-        self.ensemble = ensemble or HyperEnsemble()
-        self.leverage_engine = leverage_engine or LeverageEngine()
-        self.paper_trader = paper_trader or PaperTrader()
-        self.min_confidence = min_confidence
+        
+        # Initialize ensemble with default engines if not provided
+        if ensemble is None:
+            from src.core.onflow_engine import OnflowEngine
+            from src.core.mdp_decision import MDPDecision
+            
+            self.ensemble = HyperEnsemble()
+            self.onflow_engine = OnflowEngine()
+            self.mdp_engine = MDPDecision()
+            
+            # Add engines to ensemble
+            self.ensemble.add_engine(
+                "onflow",
+                lambda ms: (ActionType.BUY, self.onflow_engine.suggest_allocation(ms))
+            )
+            self.ensemble.add_engine(
+                "mdp",
+                lambda ms: self.mdp_engine.select_action(ms, explore=True)
+            )
+        else:
+            self.ensemble = ensemble
+            self.onflow_engine = None
+            self.mdp_engine = None
+        
+        self.leverage_engine = leverage_engine or LeverageEngine(
+            LeverageConfig(
+                max_position_pct=max_position_pct,
+                account_balance=initial_balance
+            )
+        )
+        self.paper_trader = paper_trader or PaperTrader(initial_balance=initial_balance)
         self.execute_trades = execute_trades
         self.metrics_path = Path(metrics_path)
         
@@ -132,16 +168,21 @@ class MarketSimulator:
             
             return {
                 "iteration": self.iteration,
-                "status": "executed",
+                "status": "paper_trade",
                 "action": sized_action.action_type.value,
                 "size": sized_action.size,
                 "leverage": sized_action.leverage,
                 "confidence": decision.consensus_confidence,
                 "price": market_state.price,
+                "pnl": 0,  # Will be calculated on position close
                 "trade": {
                     "entry_price": trade.entry_price,
                     "fees_paid": trade.fees_paid,
                     "slippage_pct": trade.slippage_pct
+                },
+                "market_state": {
+                    "price": market_state.price,
+                    "regime": market_state.regime.value
                 }
             }
         else:
@@ -151,8 +192,61 @@ class MarketSimulator:
                 "action": sized_action.action_type.value,
                 "size": sized_action.size,
                 "confidence": decision.consensus_confidence,
-                "price": market_state.price
+                "price": market_state.price,
+                "market_state": {
+                    "price": market_state.price,
+                    "regime": market_state.regime.value
+                }
             }
+    
+    async def run_cycle(self, symbol: str = "SOL/USD", execute_trades: bool = None) -> Dict[str, Any]:
+        """
+        Run one simulation cycle (alias for run_iteration with optional execute_trades override).
+        
+        Args:
+            symbol: Trading symbol
+            execute_trades: Override execute_trades setting for this cycle
+            
+        Returns:
+            Cycle report
+        """
+        if execute_trades is not None:
+            old_execute = self.execute_trades
+            self.execute_trades = execute_trades
+            result = await self.run_iteration(symbol)
+            self.execute_trades = old_execute
+            return result
+        else:
+            return await self.run_iteration(symbol)
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """
+        Get current simulation summary.
+        
+        Returns:
+            Summary dictionary with balance, trades, P&L, etc.
+        """
+        paper_summary = self.paper_trader.get_summary()
+        
+        # Normalize keys for consistency
+        final_balance = paper_summary.get("current_balance", paper_summary.get("final_balance", 0))
+        total_pnl = paper_summary.get("total_pnl", 0)
+        total_trades = paper_summary.get("total_trades", 0)
+        winning_trades = paper_summary.get("winning_trades", 0)
+        
+        return {
+            "final_balance": final_balance,
+            "total_pnl": total_pnl,
+            "total_trades": total_trades,
+            "winning_trades": winning_trades,
+            "win_rate_pct": paper_summary.get("win_rate", 0.0),
+            "return_pct": paper_summary.get("return_pct", 0.0),
+            "max_drawdown_pct": 0.0,  # Would need historical tracking
+            "blocked_count": self.decisions_blocked,
+            "approved_count": self.decisions_approved,
+            "total_cycles": self.iteration,
+            "approval_rate": (self.decisions_approved / self.iteration * 100) if self.iteration > 0 else 0
+        }
     
     async def run_simulation(
         self,

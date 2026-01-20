@@ -32,8 +32,20 @@ pip install -r requirements.txt
 ```
 
 3. **Run a simulation**
+
+Mock data (fast, for testing):
 ```bash
 python tools/run_simulation.py --iterations 100 --execute-trades
+```
+
+Real-time data (uses live Jupiter/Birdeye APIs):
+```bash
+python tools/run_simulation.py --real-time --iterations 100 --execute-trades
+```
+
+With interactive GUI dashboard:
+```bash
+python tools/run_simulation.py --gui --real-time --iterations 100 --execute-trades
 ```
 
 Or run the bot directly:
@@ -47,6 +59,46 @@ Build and run:
 ```bash
 docker build -t solana-hyper-bot3:latest .
 docker run --rm -v $(pwd)/data:/app/data solana-hyper-bot3:latest --mode simulation --cycles 20
+```
+
+## 📊 GUI Dashboard
+
+The bot includes an interactive GUI for real-time monitoring:
+
+```bash
+python tools/run_simulation.py --gui --real-time --execute-trades
+```
+
+Features:
+- Real-time status and price display
+- Performance metrics (P&L, win rate, drawdown)
+- Trade log with auto-scroll
+- Toggleable dark/light themes
+- Compact/detailed view modes
+- Resizable window
+
+See [docs/GUI_GUIDE.md](docs/GUI_GUIDE.md) for detailed GUI documentation.
+
+**Note**: GUI requires `tkinter`. Install with `sudo apt-get install python3-tk` on Ubuntu/Debian.
+
+## 🌐 Real-Time Mode
+
+Use real market data instead of simulated data:
+
+```bash
+python tools/run_simulation.py --real-time --execute-trades
+```
+
+Real-time mode:
+- Fetches live SOL prices from Jupiter API
+- Uses Birdeye for volume and liquidity metrics
+- Calculates real-time spreads and volatility
+- Tracks cumulative P&L with actual market conditions
+
+Optional environment variables:
+```bash
+export JUPITER_ENDPOINT="https://quote-api.jup.ag/v6"
+export BIRDEYE_API_KEY="your_key"  # For higher rate limits
 ```
 
 ## 🏗️ Architecture
@@ -93,12 +145,31 @@ The bot includes comprehensive simulation capabilities that use the **same decis
 ### Run Simulation
 
 ```bash
-# Quick simulation (100 iterations)
+# Mock data simulation (fast, for testing)
 python tools/run_simulation.py --iterations 100 --execute-trades --min-confidence 0.75
+
+# Real-time simulation with live APIs
+python tools/run_simulation.py --real-time --iterations 100 --execute-trades
+
+# With GUI dashboard
+python tools/run_simulation.py --gui --real-time --iterations 100 --execute-trades
 
 # Extended simulation
 python tools/run_simulation.py --iterations 1000 --delay 0.5 --execute-trades
 ```
+
+### Simulation Modes
+
+**Mock Mode** (default):
+- Synthetic random walk price data
+- Fast execution, no API calls
+- Ideal for testing logic and strategy
+
+**Real-Time Mode** (`--real-time`):
+- Live SOL prices from Jupiter API
+- Real volume/liquidity from Birdeye
+- Actual market conditions and volatility
+- **Cumulative P&L tracking** across all trades
 
 ### Simulation Output
 
@@ -108,6 +179,7 @@ Results written to `data/performance_stats.json`:
 - Iteration-by-iteration reports
 
 See [docs/SIMULATION_GUIDE.md](docs/SIMULATION_GUIDE.md) for comprehensive simulation documentation.
+See [docs/GUI_GUIDE.md](docs/GUI_GUIDE.md) for GUI dashboard usage.
 
 ## ⚙️ Configuration
 
